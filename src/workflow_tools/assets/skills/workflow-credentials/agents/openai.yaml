@@ -1,0 +1,6 @@
+interface:
+  display_name: "集中授权与门禁"
+  short_description: "集中管理项目授权文件，检查权限缺项并自动取用云端加密凭据。"
+  default_prompt: "使用 $workflow-credentials 完成当前项目的相关操作并报告实际验证结果。"
+policy:
+  allow_implicit_invocation: true

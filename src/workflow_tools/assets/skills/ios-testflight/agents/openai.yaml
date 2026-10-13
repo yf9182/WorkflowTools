@@ -1,0 +1,6 @@
+interface:
+  display_name: "iOS 打包与 TestFlight"
+  short_description: "使用文件签名完成 iOS 归档上传，并持续查询 TestFlight 构建状态。"
+  default_prompt: "使用 $ios-testflight 完成当前项目的相关操作并报告实际验证结果。"
+policy:
+  allow_implicit_invocation: true

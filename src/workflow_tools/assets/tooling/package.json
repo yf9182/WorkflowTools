@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "wrangler": "4.149.0"
+  },
+  "private": true
+}

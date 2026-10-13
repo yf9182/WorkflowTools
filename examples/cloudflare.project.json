@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "project_id": "my-cloudflare-project",
+  "credential_provider": "r2",
+  "credential_refs": {
+    "personal/cloudflare-deploy": {
+      "kind": "api_token",
+      "version": 1
+    }
+  },
+  "ios": {
+    "enabled": false,
+    "project": "",
+    "workspace": "",
+    "scheme": "",
+    "bundle_id": "",
+    "team_id": "",
+    "app_store_id": "",
+    "source_paths": [],
+    "apple": {
+      "key_id": "",
+      "issuer_id": "",
+      "vendor_number": "",
+      "p8_ref": ""
+    },
+    "signing": {
+      "p12_ref": "",
+      "password_ref": "",
+      "profiles": {}
+    }
+  },
+  "analytics": {
+    "sources": [],
+    "window_days": 28,
+    "sample_floor": 30,
+    "google": {
+      "property_id": "",
+      "service_account_ref": ""
+    },
+    "product_ids": [],
+    "funnels": []
+  },
+  "cloudflare": {
+    "account_id": "REPLACE_WITH_ACCOUNT_ID",
+    "api_token_ref": "personal/cloudflare-deploy",
+    "targets": {
+      "backend": {
+        "kind": "workers",
+        "directory": "backend",
+        "wrangler_config": "backend/wrangler.jsonc",
+        "default_environment": "production",
+        "environments": {
+          "production": {
+            "name": "my-api",
+            "wrangler_environment": "",
+            "healthcheck": {
+              "url": "https://my-api.example.com/health",
+              "expected_status": 200
+            }
+          }
+        }
+      },
+      "frontend": {
+        "kind": "pages",
+        "directory": "frontend",
+        "build_command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "output_directory": "frontend/dist",
+        "default_environment": "production",
+        "environments": {
+          "production": {
+            "name": "my-web",
+            "branch": "main",
+            "healthcheck": {
+              "url": "https://my-web.pages.dev",
+              "expected_status": 200
+            }
+          }
+        }
+      }
+    }
+  }
+}

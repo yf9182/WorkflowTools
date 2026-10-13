@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.workflow-tools/output/
+.env
+.dev.vars
+*.p8
+*.p12
+*.key
+*.keychain*
+*.mobileprovision
+.DS_Store

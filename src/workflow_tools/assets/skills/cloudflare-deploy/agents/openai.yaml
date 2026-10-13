@@ -1,0 +1,6 @@
+interface:
+  display_name: "Cloudflare 前后端部署"
+  short_description: "核对账户目标和环境后部署 Workers、静态前端或 Pages 并回读结果。"
+  default_prompt: "使用 $cloudflare-deploy 完成当前项目的相关操作并报告实际验证结果。"
+policy:
+  allow_implicit_invocation: true

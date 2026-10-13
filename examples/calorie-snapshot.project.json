@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "project_id": "calorie-snapshot",
+  "credential_provider": "r2",
+  "credential_refs": {
+    "personal/apple-p8": {
+      "kind": "apple_p8",
+      "version": 1
+    },
+    "personal/google-service-account": {
+      "kind": "google_service_account",
+      "version": 1
+    },
+    "personal/distribution": {
+      "kind": "pkcs12",
+      "version": 1
+    },
+    "personal/distribution-password": {
+      "kind": "password",
+      "version": 1
+    },
+    "personal/calorie-profile": {
+      "kind": "provisioning_profile",
+      "version": 1
+    }
+  },
+  "ios": {
+    "enabled": true,
+    "project": "CalorieSnapshot.xcodeproj",
+    "workspace": "",
+    "scheme": "CalorieSnapshot",
+    "bundle_id": "com.hn.CalorieSnapshot",
+    "team_id": "Z3YH9HL8H3",
+    "app_store_id": "6743989526",
+    "source_paths": [],
+    "apple": {
+      "key_id": "D8AK2F5T3B",
+      "issuer_id": "3ee0d37a-6da0-4810-9605-df4f01ed2016",
+      "vendor_number": "92699839",
+      "p8_ref": "personal/apple-p8"
+    },
+    "signing": {
+      "p12_ref": "personal/distribution",
+      "password_ref": "personal/distribution-password",
+      "profiles": {
+        "com.hn.CalorieSnapshot": "personal/calorie-profile"
+      }
+    }
+  },
+  "analytics": {
+    "sources": [
+      "ga4",
+      "asc_sales",
+      "apple_analytics"
+    ],
+    "window_days": 28,
+    "sample_floor": 30,
+    "google": {
+      "property_id": "497941483",
+      "service_account_ref": "personal/google-service-account"
+    },
+    "product_ids": [
+      "com.hn.CalorieSnapshot.subscription.yearly",
+      "com.hn.CalorieSnapshot.subscription.weekly"
+    ],
+    "funnels": []
+  },
+  "cloudflare": {
+    "account_id": "",
+    "api_token_ref": "",
+    "targets": {}
+  }
+}
