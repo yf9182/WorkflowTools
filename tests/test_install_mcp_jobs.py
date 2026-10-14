@@ -96,7 +96,7 @@ def test_real_stdio_mcp_discovers_all_tools_and_matches_cli(project,vault):
             result=await client.list_tools()
             tools=result.tools if hasattr(result,'tools') else result
             names={t.name for t in tools}
-            assert names=={'workflow_doctor','ios_build','ios_upload_testflight','ios_testflight_status','analytics_fetch',
+            assert names=={'workflow_doctor','ios_profiles_prepare','ios_build','ios_upload_testflight','ios_testflight_status','analytics_fetch',
                 'analytics_report','cloudflare_deploy','cloudflare_status','workflow_job_status','workflow_job_resume'}
             response=await client.call_tool('workflow_doctor',{'capability':'ios_upload_testflight'})
             content=response.structured_content

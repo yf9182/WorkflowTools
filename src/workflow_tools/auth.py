@@ -100,14 +100,108 @@ class Apple:
                 "UNSAFE_URL", "ASC 只允许固定 API 的读取")
         return self.http.json(ASC + path, headers=self.headers())
 
+    def mutate(self, method, path, payload):
+        require(method in ("POST", "PATCH", "DELETE") and path.startswith("/v1/")
+                and not urllib.parse.urlsplit(path).netloc,
+                "UNSAFE_URL", "ASC 写入地址不受信任")
+        return self.http.json(ASC + path, method=method, headers=self.headers(), payload=payload)
+
+    def prepare_app_store_profiles(self, bundles, certificate_sha1):
+        """Create missing App Store profiles for existing App IDs and our exact signing cert."""
+        from .ios import decode_profile, validate_profile
+        bundles = list(dict.fromkeys(bundles))
+        require(bundles and all(isinstance(x, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]+", x) for x in bundles),
+                "CONFIG_INVALID", "Bundle ID 列表无效")
+        require(self.ios.get("bundle_id") in bundles, "TARGET_MISMATCH", "Bundle ID 列表必须包含项目主 App")
+        try:
+            certs = []
+            for cert_type in ("IOS_DISTRIBUTION", "DISTRIBUTION"):
+                certs.extend(self.items("/v1/certificates?" + urllib.parse.urlencode({
+                    "filter[certificateType]": cert_type, "limit": "200",
+                    "fields[certificates]": "certificateType,certificateContent,expirationDate,activated"})))
+            certs = list({x.get("id"): x for x in certs if x.get("id")}.values())
+        except Failure as e:
+            if e.code == "AUTH_PERMISSION_DENIED":
+                raise Failure(e.code, "ASC API key has no Provisioning access; use a Team API key with an authorized role") from None
+            raise
+        matching = []
+        for cert in certs:
+            attrs = cert.get("attributes", {})
+            if attrs.get("activated") is not True or attrs.get("certificateType") not in ("IOS_DISTRIBUTION", "DISTRIBUTION"):
+                continue
+            try:
+                der = base64.b64decode(attrs.get("certificateContent", ""), validate=True)
+                fingerprint = hashes.Hash(hashes.SHA1()); fingerprint.update(der)
+                if fingerprint.finalize().hex().upper() == certificate_sha1:
+                    matching.append(cert)
+            except Exception:
+                continue
+        require(len(matching) == 1, "TARGET_MISMATCH", "ASC 中找不到唯一且有效的当前 Distribution 证书")
+        certificate_id = matching[0]["id"]
+        profiles = []
+        query = urllib.parse.urlencode({
+            "filter[profileType]": "IOS_APP_STORE", "filter[profileState]": "ACTIVE", "include": "bundleId,certificates",
+            "limit": "200", "fields[profiles]": "name,profileType,profileState,profileContent,uuid,expirationDate,bundleId,certificates",
+            "fields[bundleIds]": "identifier", "fields[certificates]": "certificateType,certificateContent,activated,expirationDate"})
+        profiles = self.items("/v1/profiles?" + query)
+        included_by_id = {x.get("id"): x for x in self._last_included if x.get("type") == "bundleIds"}
+        result = {}
+        for bundle in bundles:
+            found = None
+            created_here = False
+            for row in profiles:
+                rel = row.get("relationships", {})
+                bid = rel.get("bundleId", {}).get("data", {}).get("id")
+                cert_rel = rel.get("certificates", {}).get("data", [])
+                if included_by_id.get(bid, {}).get("attributes", {}).get("identifier") == bundle and any(c.get("id") == certificate_id for c in cert_rel):
+                    content = row.get("attributes", {}).get("profileContent")
+                    if content:
+                        found = row
+                        break
+            if found is None:
+                bundle_rows = self.items("/v1/bundleIds?" + urllib.parse.urlencode({
+                    "filter[identifier]": bundle, "filter[platform]": "IOS", "limit": "200"}))
+                require(len(bundle_rows) == 1, "APPLE_APP_ID_MISSING", "Apple Developer 团队中没有唯一匹配的 iOS App ID；需先登记 Bundle ID", bundle_id=bundle)
+                name = "WorkflowTools " + bundle[-72:] + " " + certificate_sha1[:8]
+                try:
+                    created = self.mutate("POST", "/v1/profiles", {"data": {"type": "profiles",
+                        "attributes": {"name": name, "profileType": "IOS_APP_STORE"},
+                        "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_rows[0]["id"]}},
+                                          "certificates": {"data": [{"type": "certificates", "id": certificate_id}]}}}})
+                except Failure as e:
+                    if e.code == "AUTH_PERMISSION_DENIED":
+                        raise Failure(e.code, "ASC API key cannot create provisioning profiles; use a Team API key with an authorized role", bundle_id=bundle) from None
+                    raise
+                found = created.get("data", {})
+                created_here = True
+                if not found.get("attributes", {}).get("profileContent") and found.get("id"):
+                    found = self.get("/v1/profiles/" + urllib.parse.quote(found["id"], safe="") + "?" + urllib.parse.urlencode({
+                        "fields[profiles]": "name,profileType,profileState,profileContent,uuid,expirationDate,bundleId,certificates",
+                        "include": "bundleId,certificates", "fields[bundleIds]": "identifier",
+                        "fields[certificates]": "certificateType,certificateContent,activated,expirationDate"})).get("data", {})
+            attrs = found.get("attributes", {})
+            require(attrs.get("profileType") == "IOS_APP_STORE" and attrs.get("profileState", "ACTIVE") == "ACTIVE",
+                    "PROFILE_NOT_APP_STORE", "ASC 返回的描述文件不是有效的 App Store 分发类型", bundle_id=bundle)
+            try:
+                raw = base64.b64decode(attrs["profileContent"], validate=True)
+                meta = validate_profile(decode_profile(raw), self.ios["team_id"], bundle, certificate_sha1)
+            except Failure:
+                raise
+            except Exception:
+                raise Failure("PROFILE_INVALID", "ASC 未返回有效的描述文件内容", bundle_id=bundle) from None
+            result[bundle] = {"profile": raw, "metadata": meta, "created": created_here}
+        return result
+
     def items(self, path):
-        rows = []
+        rows, included = [], []
         for _ in range(100):
             d = self.get(path)
             require(isinstance(d.get("data"), list), "API_INVALID_RESPONSE", "ASC 列表格式无效")
             rows.extend(d["data"])
+            included.extend(d.get("included", []))
             nxt = d.get("links", {}).get("next")
             if not nxt:
+                self._last_included = included
                 return rows
             require(nxt.startswith(ASC + "/v1/"), "UNSAFE_URL", "ASC 分页地址不受信任")
             path = nxt[len(ASC):]

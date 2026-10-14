@@ -16,7 +16,8 @@ from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from workflow_tools.common import Failure, atomic_bytes, digest, file_sha, read_json, save
 from workflow_tools.config import Project, source_binding
 from workflow_tools.runtime import Runtime
-from workflow_tools.ios import decode_profile, validate_profile, inspect_ipa
+from workflow_tools.ios import decode_profile, validate_profile, inspect_ipa, prepare_profiles
+from workflow_tools.auth import Apple
 from workflow_tools.cloudflare import read_wrangler, target_config
 
 
@@ -67,6 +68,50 @@ def test_profile_rejects_wrong_distribution(distribution,change,code):
     if change=='certificate': fingerprint='0'*40
     with pytest.raises(Failure) as exc: validate_profile(data,'ABCDE12345','com.example.app',fingerprint)
     assert exc.value.code==code
+
+
+def test_asc_creates_profile_for_registered_bundle_and_exact_certificate(project, vault, distribution):
+    _, cert, _, profile = distribution
+    from base64 import b64encode
+    class API:
+        def __init__(self): self.created=[]
+        def json(self, url, method="GET", headers=None, payload=None):
+            if "/certificates?" in url:
+                return {"data":[{"id":"cert-1","attributes":{"certificateType":"IOS_DISTRIBUTION","activated":True,
+                    "certificateContent":b64encode(cert.public_bytes(serialization.Encoding.DER)).decode()}}]}
+            if "/profiles?" in url:
+                return {"data":[],"included":[]}
+            if "/bundleIds?" in url:
+                return {"data":[{"id":"bundle-1","attributes":{"identifier":"com.example.app"}}]}
+            if url.endswith("/v1/profiles") and method == "POST":
+                self.created.append(payload)
+                return {"data":{"id":"profile-1","attributes":{"profileType":"IOS_APP_STORE","profileState":"ACTIVE",
+                    "profileContent":b64encode(profile).decode()}}}
+            raise AssertionError(url)
+    api=API()
+    result=Apple(project,vault,api).prepare_app_store_profiles(["com.example.app"],cert.fingerprint(hashes.SHA1()).hex().upper())
+    assert result["com.example.app"]["profile"]==profile
+    assert result["com.example.app"]["created"] is True
+    assert api.created[0]["data"]["relationships"]["certificates"]["data"]==[{"type":"certificates","id":"cert-1"}]
+
+
+def test_profile_prepare_encrypts_and_registers_project_reference(project, vault, monkeypatch, distribution):
+    import workflow_tools.ios as module
+    class AppleStub:
+        def __init__(self,*_): pass
+        def prepare_app_store_profiles(self,bundles,fingerprint):
+            return {bundle:{"profile":b"synthetic-profile","created":True,
+                "metadata":{"uuid":"12345678-1234-1234-1234-123456789abc","expires_at":"2030-01-01T00:00:00"}}
+                for bundle in bundles}
+    monkeypatch.setattr(module,"Apple",AppleStub)
+    monkeypatch.setattr(module,"distribution_certificate",lambda *_:(distribution[1],"A"*40))
+    runtime=Runtime(project.root,project.home,http=object())
+    result=prepare_profiles(runtime,["com.example.app"])
+    current=read_json(project.path)
+    ref=current["ios"]["signing"]["profiles"]["com.example.app"]
+    assert result["project_config_updated"] is True
+    assert current["credential_refs"][ref]["kind"]=="provisioning_profile"
+    assert Runtime(project.root,project.home).vault.read(ref,"provisioning_profile")==b"synthetic-profile"
 
 
 def make_artifact(project, content=b'synthetic-ipa'):

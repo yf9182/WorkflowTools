@@ -1,16 +1,16 @@
 # WorkflowTools 0.1.0 验证报告
 
-日期：2026-10-13（Asia/Shanghai）。本文区分合成/模拟测试、真实只读集成与尚未验证的发布能力。
+日期：2026-10-14（Asia/Shanghai）。本文区分合成/模拟测试、真实只读集成与尚未验证的发布能力。
 
 ## 已完成
 
 | 验证 | 实际结果 | 范围 |
 |---|---|---|
-| pytest | **59 passed，3.39 秒** | AES-GCM 绑定及篡改、Scrypt 恢复、符号链接/FIFO、仓库外授权边界、文件权限、清理失败 |
+| pytest | **62 passed，5.81 秒** | 原有安全/安装/部署/分析覆盖，加 ASC provisioning 请求、目标证书匹配、profile 加密登记 |
 | 活跃进程与 SIGKILL | 通过 | 父进程被杀后子进程仍持有继承锁，sweep 不删活跃私钥；子进程退出后可清理 |
 | 上传/部署控制 | 通过 | 合成传输：并发上传一次、未知上传不重发、远端回读恢复、Worker 标记恢复、健康失败不重部署、Pages 环境错配拒绝 |
 | 数据口径 | 通过 | 退款符号、目标 App 过滤、币种隔离、版本分段、逐日 partition、样本不足、GA4 分页不完整拒绝 |
-| 真实 stdio MCP | 通过 | 新/旧协议客户端均连接；10 个工具可发现，结构化返回；与 CLI 同一 Runtime 结果 |
+| 真实 stdio MCP | 通过 | 新/旧协议客户端均连接；11 个工具可发现，结构化返回；与 CLI 同一 Runtime 结果 |
 | 安装与重复安装 | 通过 | 保留项目配置、其他 MCP、宿主审批策略、用户修改的 Skill |
 | 四个 Skill 校验 | 全部有效 | skill-creator quick_validate；无未完成脚手架 |
 | Python wheel | 构建及安装通过 | 包含 4 个 Skills、参考文档、Swift 源码、Wrangler 锁文件；无凭据文件 |
@@ -39,20 +39,16 @@
   report-8bddf620b1a343f1b3f200c11bb9b1b8.md
 ```
 
-## 凭据准备状态
+## 凭据与 ASC profile 自动化
 
-`/Users/f/.config/workflow-tools/` 已创建，0700；连接文件 0600，解密密钥已生成。原 ASC `.p8` 和 Google JSON 已读取并加密导入为 `personal/apple-p8`、`personal/google-service-account`，版本 1。原凭据未修改；日志与工具输出未包含密钥内容。
+个人机器的 `/Users/f/.config/workflow-tools/` 已配置本地凭据与私有 R2。ASC `.p8`、Google JSON、Cloudflare 部署 token、R2 读写凭据、Distribution `.p12`/密码与 CalorieSnapshot profile 已加密导入并按各自能力完成检查；具体版本与验证情况见 [当前凭据状态](CREDENTIAL_STATUS.md)。
 
-2026-10-13 复查原项目、授权目录、备份包及本机 Xcode 缓存：匹配团队与 Bundle ID 的 App Store 描述文件已加密导入 `personal/calorie-profile`，版本 1，有效期至 2027-08-11。CMS 签名、分发类型及其包含的证书摘要已核验，与当前钥匙串 Distribution 身份一致。原集中目录的 `CalorieSnapshot_AppStore.mobileprovision` 实际为开发描述文件，未采用。
-
-当前钥匙串中匹配的 Distribution 证书有效期至 2027-08-11；未导出生产私钥，也未改变钥匙串访问权限。未找到可复用 `.p12`。Cloudflare 环境 token 的验证请求返回 401，账户读取返回 403；现有 Wrangler OAuth 缓存已过期，未将这些授权导入套件，也未执行登录或刷新。
-
-仅需补充的材料见 [当前凭据状态](CREDENTIAL_STATUS.md)：R2 桶/只读与写访问配置、有效 Cloudflare 部署 token 与 Account ID、Distribution `.p12`/密码。当前**没有激活云端凭据取用**，不会把显式本地接入验证冒充 R2 集成通过。
+本次新增的 `ios_profiles_prepare` 使用现有 ASC Team API `.p8` 查找精确 Distribution 证书，为 Apple 团队内已登记的 Bundle ID 创建/复用 App Store profile，验证后以内存方式加密并登记到项目。通过模拟 ASC 的集成测试覆盖正确证书、Bundle ID、CMS profile 和项目引用；**没有在真实 Apple 团队创建额外描述文件**，所以生产 key 的 Team/Individual 类型及 Provisioning 权限仍须在目标项目首次调用时验证。
 
 ## 未验证与保留边界
 
-- 真实 R2 上传/下载、私有桶配置与远端最小权限尚未验证，缺连接访问材料。AES-GCM 与 S3 适配器由合成服务测试覆盖。
-- 真实业务 App 的手动签名归档/导出、实际 IPA、TestFlight 上传尚未验证，缺可移植的 `.p12`/密码；匹配主 App 的描述文件已接入。合成证书导入不能替代真实分发验收。
+- 自动创建的描述文件尚未在真实 Apple 团队上运行；若 `.p8` 为 Individual key 或权限不足，工具会返回权限 blocker，不回退到要求手工下载。
+- 真实业务 App 的手动签名归档/导出、实际 IPA、TestFlight 上传尚未验证。合成证书导入和 Apple API profile 创建都不能替代真实分发验收。
 - Cloudflare 业务目标没有实际发布；Workers/Pages 远端发布由合成传输验证，真实只验证 Worker dry-run。
 - 新 Mac 端到端迁移尚未实跑；备份/恢复和拒绝覆盖由临时目录测试覆盖。多机并发发布不在首版范围。
 - 测试组可用性、Apple Analytics 指标下载、留存/cohort、商店资料、提审/发布和数据库迁移未扩展或未验证。

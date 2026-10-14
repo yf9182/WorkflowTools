@@ -41,6 +41,11 @@ def create_server(root, home=None):
         return call("ios_build", version, build_number)
 
     @server.tool(annotations=external, structured_output=True)
+    def ios_profiles_prepare(bundle_ids: list[str]) -> dict[str, Any]:
+        """Create or reuse App Store profiles for explicit existing Bundle IDs via the team's ASC API key, then encrypt, store, and register them for this project. This creates Apple-side profile records and updates project credential references."""
+        return call("ios_profiles_prepare", bundle_ids)
+
+    @server.tool(annotations=external, structured_output=True)
     def ios_upload_testflight(artifact_id: str) -> dict[str, Any]:
         """Queue one TestFlight upload of an existing verified IPA; binds App/version/build and reconciles interrupted uploads."""
         return call("ios_upload_testflight", artifact_id)

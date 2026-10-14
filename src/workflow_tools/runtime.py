@@ -30,6 +30,10 @@ class Runtime:
         return self.jobs.submit("ios_build", {"version": version, "build_number": build_number,
             "source_binding": source_binding(self.project)})
 
+    def ios_profiles_prepare(self, bundle_ids):
+        from .ios import prepare_profiles
+        return prepare_profiles(self, bundle_ids)
+
     def ios_upload_testflight(self, artifact_id):
         from .ios import artifact
         artifact(self.project, artifact_id)

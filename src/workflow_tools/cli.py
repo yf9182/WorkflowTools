@@ -55,6 +55,8 @@ def parser():
     upload.add_argument("--artifact-id", required=True)
     status = ios_sub.add_parser("status")
     status.add_argument("--version", dest="app_version"); status.add_argument("--build-number")
+    profiles = ios_sub.add_parser("profiles-prepare", help="通过 ASC API 创建/登记 App Store 描述文件")
+    profiles.add_argument("--bundle-id", action="append", required=True)
     analytics = subs.add_parser("analytics")
     analytics_sub = analytics.add_subparsers(dest="action", required=True)
     fetch = analytics_sub.add_parser("fetch")
@@ -151,7 +153,8 @@ def main(argv=None):
             elif args.command == "ios":
                 result = runtime.ios_upload_testflight(args.artifact_id) if args.action == "upload" else \
                     runtime.ios_build(args.app_version, args.build_number) if args.action == "build" else \
-                    runtime.ios_testflight_status(args.app_version, args.build_number)
+                    runtime.ios_testflight_status(args.app_version, args.build_number) if args.action == "status" else \
+                    runtime.ios_profiles_prepare(args.bundle_id)
             elif args.command == "analytics":
                 result = runtime.analytics_fetch(args.sources, args.start_date, args.end_date, args.refresh) if args.action == "fetch" else runtime.analytics_report(args.dataset_id)
             elif args.command == "cloudflare":

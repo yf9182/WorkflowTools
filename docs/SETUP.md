@@ -31,7 +31,7 @@
 
 复制 `admin/r2-writer.example.json` 到 `admin/r2-writer.json`，填独立 Object Read & Write 的 `access_key_id` 与 `secret_access_key`。桶首次建立及可能的付款方式配置由账号持有人一次完成；工具不自动买服务或升级套餐。
 
-新 Mac 的免 Apple 登录签名需要 `.p12`、密码和每个 Bundle ID 的 App Store profile；只导出 `.cer` 不含私钥，不能签名。不要按 profile 文件名判断类型，工具会拒绝开发、Ad Hoc、企业或已过期文件。文件须来自目标团队并引用同一 Distribution 证书。
+免 Apple 网页登录的签名需要 `.p12`、密码和每个 Bundle ID 的 App Store profile；只导出 `.cer` 不含私钥，不能签名。通常无需手工下载 profile：若已有目标团队的 ASC Team API `.p8`（建议 Admin 角色/Provisioning 权限）、目标 Bundle ID 已登记且 `.p12` 有效，Agent 可调用 `ios_profiles_prepare` 自动创建或复用描述文件，验证后加密存入凭据库并更新项目引用。该 API 不会创建 Bundle ID、证书或 App ID capabilities；这些目标身份必须事先存在并具备正确能力配置。个人 API key 不支持 Provisioning API。仅当该自动化所需的团队 API key 缺失或权限不足时，才需补充正确授权。不要按 profile 文件名判断类型，工具会拒绝开发、Ad Hoc、企业或已过期文件；profile 必须引用同一 Distribution 证书。
 
 Cloudflare 部署 token 按实际目标授予 Workers Editor（新 Worker 创建需产品级 Admin）或 Pages 编辑权限；改域名/路由才增加对应 Zone 权限。R2 S3 访问与 Cloudflare 部署 token 是不同用途的授权。
 
@@ -49,6 +49,8 @@ Cloudflare 部署 token 按实际目标授予 Workers Editor（新 Worker 创建
 ./bin/workflow-tools credentials upload --ref personal/google-service-account
 ./bin/workflow-tools credentials check --ref personal/apple-p8
 ```
+
+维护者可手工创建 profile 时使用 `./bin/workflow-tools ios profiles-prepare --bundle-id <bundle-id>`；普通项目用户直接让 Agent 执行构建，Agent 会在 profile 缺失且授权足够时自动准备。
 
 文件 0600，目录 0700。文件路径进入命令参数，秘密内容不进入参数；不要使用 `--token <明文>`、粘贴聊天或在项目 `.env` 存部署授权。导入只输出引用、类型和版本。
 

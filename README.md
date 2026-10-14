@@ -19,13 +19,13 @@ Agent 会把 `workflow-credentials`、`ios-testflight`、`app-analytics`、`clou
 - “检查 Cloudflare 的 production 前端部署配置，然后部署 frontend。”
 - “查看上一个任务的进度；如果中断，从最近检查点继续。”
 
-Agent 可用工具包括 `workflow_doctor`、`ios_build`、`ios_upload_testflight`、`ios_testflight_status`、`analytics_fetch`、`analytics_report`、`cloudflare_deploy`、`cloudflare_status`、`workflow_job_status` 和 `workflow_job_resume`。长任务会返回 `job_id`，可以查询和恢复。iOS 上传会先记录意图并核验远端状态，结果未知时不会盲目重复上传。
+Agent 可用工具包括 `workflow_doctor`、`ios_profiles_prepare`、`ios_build`、`ios_upload_testflight`、`ios_testflight_status`、`analytics_fetch`、`analytics_report`、`cloudflare_deploy`、`cloudflare_status`、`workflow_job_status` 和 `workflow_job_resume`。长任务会返回 `job_id`，可以查询和恢复。iOS 缺少描述文件时，Agent 可通过团队 ASC API 自动创建/下载、验证、加密并登记；上传会先记录意图并核验远端状态，结果未知时不会盲目重复上传。
 
 ## 授权与首次接入
 
 凭据集中保存在机器本地 `~/.config/workflow-tools/`，不进入项目仓库。Agent 通过凭据引用调用工具，不会把明文密钥返回给对话。安装到同一台 Mac 的其他项目可复用现有凭据；换机器时需要导入受保护的连接授权。
 
-已配置私有 Cloudflare R2，凭据对象上传前使用 AES-256-GCM 加密。运行端令牌只读，凭据上传使用另一个仅对专用桶有读写权限的令牌。日常任务不需要重复登录 Cloudflare、App Store Connect 或 Google；首次机器接入、令牌撤销、权限变化和证书到期仍需补充授权。
+已配置私有 Cloudflare R2，凭据对象上传前使用 AES-256-GCM 加密。运行端令牌只读，凭据上传使用另一个仅对专用桶有读写权限的令牌。日常任务不需要重复登录 Cloudflare、App Store Connect 或 Google；首次机器接入、令牌撤销、权限变化和证书到期仍需补充授权。自动准备 Apple 描述文件要求已配置有效的团队 ASC API `.p8`（Team API Key 且具备 Provisioning 权限）、Apple 团队中已登记目标 Bundle ID，以及匹配的 Distribution `.p12`。工具不会创建证书、Bundle ID 或更改 App 能力。
 
 需要准备的材料、文件位置和权限见[集中接入清单](docs/SETUP.md)。本机当前接入状态见[凭据状态](docs/CREDENTIAL_STATUS.md)。项目配置只保存工程路径、目标身份、数据口径、部署目标和凭据引用，不保存密钥。
 

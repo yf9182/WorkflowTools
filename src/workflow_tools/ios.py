@@ -52,7 +52,7 @@ def validate_profile(data, team, bundle, certificate_sha1=None):
     return {"uuid": data["UUID"], "bundle_id": bundle, "expires_at": expiration.isoformat(), "type": "app-store"}
 
 
-def signing_metadata(project, vault):
+def distribution_certificate(project, vault):
     ios = project.section("ios")
     signing = ios.get("signing", {})
     raw = vault.read(signing["p12_ref"], "pkcs12")
@@ -70,12 +70,66 @@ def signing_metadata(project, vault):
     teams = [x.value for x in cert.subject.get_attributes_for_oid(NameOID.ORGANIZATIONAL_UNIT_NAME)]
     require(ios["team_id"] in teams and any(x.startswith(("Apple Distribution:", "iPhone Distribution:")) for x in names),
             "TARGET_MISMATCH", "需要目标团队的 Apple Distribution 证书")
-    fingerprint = cert.fingerprint(hashes.SHA1()).hex().upper()
+    return cert, cert.fingerprint(hashes.SHA1()).hex().upper()
+
+
+def signing_metadata(project, vault):
+    ios = project.section("ios")
+    signing = ios.get("signing", {})
+    cert, fingerprint = distribution_certificate(project, vault)
     profiles = {}
     for bundle, ref in signing.get("profiles", {}).items():
         profiles[bundle] = validate_profile(decode_profile(vault.read(ref, "provisioning_profile")), ios["team_id"], bundle, fingerprint)
     require(ios["bundle_id"] in profiles, "AUTH_MISSING", "缺少主 App 的 App Store 描述文件")
     return {"certificate_sha1": fingerprint, "certificate_expires_at": cert.not_valid_after_utc.isoformat(), "profiles": profiles}
+
+
+def prepare_profiles(runtime, bundle_ids):
+    """Create/reuse App Store profiles through ASC, encrypt them, and attach refs to this project."""
+    project, vault = runtime.project, runtime.vault
+    ios = project.section("ios")
+    require(ios.get("enabled") is True, "CAPABILITY_DISABLED", "项目未启用 iOS 能力")
+    bundles = list(dict.fromkeys(bundle_ids or []))
+    require(ios.get("bundle_id") in bundles, "TARGET_MISMATCH", "请求必须包含项目主 App 的 Bundle ID")
+    cert, fingerprint = distribution_certificate(project, vault)
+    generated = Apple(project, vault, runtime.http).prepare_app_store_profiles(bundles, fingerprint)
+    config_path = project.path
+    with lock(project.root / ".workflow-tools/profile-sync.lock"):
+        current = read_json(config_path)
+        require(current is not None and current.get("project_id") == project.id
+                and current.get("ios", {}).get("bundle_id") == ios.get("bundle_id")
+                and current.get("ios", {}).get("team_id") == ios.get("team_id")
+                and current.get("ios", {}).get("apple", {}).get("p8_ref") == ios.get("apple", {}).get("p8_ref"),
+                "CONFIG_CHANGED", "项目身份或 Apple 授权配置已变化，请重新检查后再运行")
+        refs = current.setdefault("credential_refs", {})
+        profiles = current.setdefault("ios", {}).setdefault("signing", {}).setdefault("profiles", {})
+        results = []
+        for bundle, data in generated.items():
+            existing_ref = profiles.get(bundle)
+            existing_meta = refs.get(existing_ref, {}) if isinstance(existing_ref, str) else {}
+            if existing_meta.get("kind") == "provisioning_profile" and isinstance(existing_meta.get("version"), int):
+                try:
+                    existing = validate_profile(decode_profile(vault.read(existing_ref, "provisioning_profile")),
+                                                ios["team_id"], bundle, fingerprint)
+                    if existing["uuid"] == data["metadata"]["uuid"]:
+                        results.append({"bundle_id": bundle, "credential_ref": existing_ref,
+                            "version": existing_meta["version"], "uuid": existing["uuid"],
+                            "expires_at": existing["expires_at"], "created": data["created"], "reused_local": True})
+                        continue
+                except Failure:
+                    pass
+            ref = "apple/profiles/" + digest(bundle)[:24]
+            saved = vault.import_bytes(ref, "provisioning_profile", data["profile"])
+            if project.data.get("credential_provider", "r2") == "r2":
+                vault.upload(ref)
+            refs.update(saved["credential_ref"])
+            profiles[bundle] = ref
+            results.append({"bundle_id": bundle, "credential_ref": ref, "version": saved["version"],
+                            "uuid": data["metadata"]["uuid"], "expires_at": data["metadata"]["expires_at"],
+                            "created": data["created"]})
+        save(config_path, current)
+    return {"status": "ready", "profiles": results, "certificate_sha1": fingerprint,
+            "certificate_expires_at": cert.not_valid_after_utc.isoformat(), "project_config_updated": True}
 
 
 def native_helper(home):

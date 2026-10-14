@@ -44,7 +44,7 @@ def test_aead_rejects_swaps_and_tampering(mutation):
     if mutation == "key":
         key = os.urandom(32)
     elif mutation in ("ciphertext", "nonce"):
-        obj[mutation] = "A" + obj[mutation][1:]
+        obj[mutation] = ("A" if obj[mutation][0] != "A" else "B") + obj[mutation][1:]
     else:
         obj[mutation] = {"ref": "other/item", "version": 2, "kind": "password"}[mutation]
     with pytest.raises(Failure):
@@ -174,3 +174,12 @@ def test_backup_restore_and_wrong_password_leave_no_connection(project, vault, t
     with pytest.raises(Failure):
         bad.restore(out, wrong)
     assert not bad.bootstrap_path.exists()
+
+
+def test_import_api_bytes_encrypts_without_plaintext_staging(project, vault, tmp_path):
+    raw = b"synthetic-profile-content"
+    result = vault.import_bytes("apple/profile-test", "provisioning_profile", raw)
+    assert result["version"] == 1
+    encrypted = next((project.home / "vault/workflow-tools/v1/objects").rglob("1.json")).read_bytes()
+    assert raw not in encrypted
+    assert vault.read("apple/profile-test", "provisioning_profile") == raw

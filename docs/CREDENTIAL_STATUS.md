@@ -20,7 +20,7 @@ App Store 描述文件来自本机 Xcode 缓存。原授权目录里名称为 `C
 
 ## 只需补充这些材料
 
-目前没有缺失的凭据材料。当前 CalorieSnapshot 工程仅发现主 App Bundle ID `com.hn.CalorieSnapshot`，对应 App Store profile 已就绪。以后安装到含扩展或其他 Bundle ID 的项目时，再为每个签名目标提供对应的 App Store profile。
+目前没有缺失的本机凭据材料。当前 CalorieSnapshot 工程仅发现主 App Bundle ID `com.hn.CalorieSnapshot`，对应 App Store profile 已就绪。以后安装到含扩展或其他 Bundle ID 的项目时，若该 Bundle ID 已登记且 ASC `.p8` 是有 Provisioning 权限的团队 API key，Agent 可通过 API 自动创建/下载并登记对应 App Store profile；无需用户手工获取文件。
 
 目录 0700，秘密文件 0600。密钥和密码直接写入授权目录，不发到聊天、不写入仓库。详细导入、权限及加密上传命令见 [接入说明](SETUP.md)。
 

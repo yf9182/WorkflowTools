@@ -243,6 +243,27 @@ class Vault:
         return {"status": "ready", "ref": ref, "kind": kind, "version": chosen,
                 "credential_ref": {ref: {"kind": kind, "version": chosen}}}
 
+    def import_bytes(self, ref, kind, raw, version=None):
+        """Encrypt trusted API-returned material without writing a plaintext staging file."""
+        reference(ref)
+        validate_bytes(kind, raw)
+        _, key = self.connection()
+        with lock(self.home / "locks/vault.lock"):
+            catalog = read_json(self.home / "vault/catalog.json", {"schema_version": 1, "credentials": {}})
+            old = catalog["credentials"].get(ref, {})
+            chosen = version or old.get("version", 0) + 1
+            require(isinstance(chosen, int) and chosen > old.get("version", 0),
+                    "AUTH_VERSION_CONFLICT", "轮换必须使用更高的凭据版本")
+            obj = encrypt(key, raw, ref, chosen, kind)
+            path = self.home / "vault" / self.object_key(ref, chosen)
+            require(not path.exists(), "AUTH_VERSION_CONFLICT", "该凭据版本已存在，不能覆盖")
+            save(path, obj)
+            catalog["credentials"][ref] = {"kind": kind, "version": chosen, "updated_at": stamp()}
+            save(self.home / "vault/catalog.json", catalog)
+        self.refs[ref] = {"kind": kind, "version": chosen}
+        return {"status": "ready", "ref": ref, "kind": kind, "version": chosen,
+                "credential_ref": {ref: {"kind": kind, "version": chosen}}}
+
     def upload(self, ref):
         reference(ref)
         catalog = read_json(self.home / "vault/catalog.json", {})
