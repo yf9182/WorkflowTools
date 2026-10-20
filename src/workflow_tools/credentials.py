@@ -127,6 +127,12 @@ class Vault:
             key = decode(d["encryption_key"])
             require(d.get("schema_version") == 1 and len(key) == 32,
                     "AUTH_INVALID", "连接授权格式无效")
+            cloudflare = d.get("cloudflare", {})
+            require(isinstance(cloudflare, dict), "AUTH_INVALID", "连接授权格式无效")
+            account_id = cloudflare.get("account_id", "")
+            require(not account_id or (isinstance(account_id, str)
+                    and re.fullmatch(r"[0-9a-f]{32}", account_id)),
+                    "AUTH_INVALID", "本机 Cloudflare Account ID 格式无效")
             self._known.extend([d["encryption_key"], d.get("r2", {}).get("secret_access_key", "")])
             return d, key
         except Failure:
@@ -141,14 +147,15 @@ class Vault:
                 self.connection()
                 return {"status": "ready", "created": False, "file": str(self.bootstrap_path)}
             save(self.bootstrap_path, {"schema_version": 1, "encryption_key": encode(secrets.token_bytes(32)),
-                "r2": {"account_id": "", "bucket": "", "access_key_id": "", "secret_access_key": "", "jurisdiction": ""}})
+                "r2": {"account_id": "", "bucket": "", "access_key_id": "", "secret_access_key": "", "jurisdiction": ""},
+                "cloudflare": {"account_id": ""}})
             secure_dir(self.home / "incoming")
             for folder in ("apple/profiles", "google", "cloudflare"):
                 secure_dir(self.home / "incoming" / folder)
             save(self.home / "admin/r2-writer.example.json", {"access_key_id": "", "secret_access_key": ""})
             save(self.home / "vault/catalog.json", {"schema_version": 1, "credentials": {}})
         return {"status": "ready", "created": True, "file": str(self.bootstrap_path),
-                "message": "请在连接授权文件填入 R2 桶级只读访问凭据；不要贴入聊天"}
+                "message": "请在连接授权文件填入本机 Cloudflare 默认 Account ID（可选）和 R2 桶级只读访问凭据；不要贴入聊天"}
 
     def client(self, writer=False):
         if self._s3_override is not None:

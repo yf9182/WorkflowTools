@@ -8,7 +8,7 @@
 
 ```text
 ~/.config/workflow-tools/
-├── bootstrap/connection.json        自动生成 AES 密钥；填写 r2 对象的访问字段
+├── bootstrap/connection.json        自动生成 AES 密钥；填写本机 Cloudflare 默认账号与 R2 访问字段
 ├── admin/r2-writer.json              独立 R2 上传管理访问凭据
 ├── incoming/
 │   ├── apple/distribution.p12        目标团队 Apple Distribution 证书和私钥
@@ -27,7 +27,7 @@
 ./bin/workflow-tools credentials init
 ```
 
-连接文件已生成的 `encryption_key` 必须保留，不要重新填写或发到聊天。填写 `r2.account_id`、`r2.bucket`、`r2.access_key_id`、`r2.secret_access_key`；特殊区域桶还需要 `r2.jurisdiction`（eu/us/fedramp）。R2 Object Read only 访问凭据限定在这个私有桶，不启用 r2.dev 或公共域名。
+连接文件已生成的 `encryption_key` 必须保留，不要重新填写或发到聊天。填写 `r2.account_id`、`r2.bucket`、`r2.access_key_id`、`r2.secret_access_key`；特殊区域桶还需要 `r2.jurisdiction`（eu/us/fedramp）。如需让本机所有项目默认使用同一 Cloudflare 部署账户，可填写 `cloudflare.account_id`；项目 `.workflow-tools/project.json` 中的非空 `cloudflare.account_id` 会优先使用。Cloudflare Account ID 不是 API Token。R2 Object Read only 访问凭据限定在这个私有桶，不启用 r2.dev 或公共域名。
 
 复制 `admin/r2-writer.example.json` 到 `admin/r2-writer.json`，填独立 Object Read & Write 的 `access_key_id` 与 `secret_access_key`。桶首次建立及可能的付款方式配置由账号持有人一次完成；工具不自动买服务或升级套餐。
 

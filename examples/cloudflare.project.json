@@ -41,7 +41,7 @@
     "funnels": []
   },
   "cloudflare": {
-    "account_id": "REPLACE_WITH_ACCOUNT_ID",
+    "account_id": "",
     "api_token_ref": "personal/cloudflare-deploy",
     "targets": {
       "backend": {

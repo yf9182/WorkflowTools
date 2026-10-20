@@ -5,7 +5,7 @@ description: 使用 WorkflowTools 和项目 Wrangler 配置部署 Cloudflare Wor
 
 # Cloudflare 部署
 
-从项目配置选取 target 和 environment，多目标/环境时不猜测生产目标。用 `workflow_doctor(capability="cloudflare_deploy", target, environment)` 检查本项依赖；无需 Apple 或 Google 凭据。
+从项目配置选取 target 和 environment，多目标/环境时不猜测生产目标。Cloudflare Account ID 默认读取本机 WorkflowTools 连接配置中的 `cloudflare.account_id`；项目显式填写时优先使用项目值。用 `workflow_doctor(capability="cloudflare_deploy", target, environment)` 检查本项依赖；无需 Apple 或 Google 凭据。
 
 缺 Wrangler 时可在已授权的工具准备范围内运行 `./.workflow-tools/run setup --wrangler`。配置格式和权限见 [部署配置](references/deploy.md)。鉴权来自加密凭据引用，不执行 `wrangler login`，不把 token 写进 `.env` 或源码。
 

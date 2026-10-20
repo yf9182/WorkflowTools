@@ -1,10 +1,10 @@
 # 部署目标
 
-cloudflare 段配置 account_id、api_token_ref 和 targets。目标包含 kind、directory、name、environments、default_environment；环境必须显式列出。
+cloudflare 段配置 api_token_ref 和 targets。`account_id` 可省略，此时使用本机 `~/.config/workflow-tools/bootstrap/connection.json` 中的 `cloudflare.account_id`；项目填写非空 `account_id` 时优先使用项目值。目标包含 kind、directory、name、environments、default_environment；环境必须显式列出。
 
 ```json
 {
- "account_id":"填写32位账户ID","api_token_ref":"personal/cloudflare-deploy",
+ "account_id":"","api_token_ref":"personal/cloudflare-deploy",
  "targets": {
   "backend":{"kind":"workers","directory":"backend","wrangler_config":"backend/wrangler.jsonc","environments":{"production":{"name":"my-api","wrangler_environment":""}},"default_environment":"production"},
   "frontend":{"kind":"pages","directory":"frontend","build_command":["npm","run","build"],"output_directory":"frontend/dist","environments":{"production":{"name":"my-web","branch":"main","healthcheck":{"url":"https://my-web.pages.dev","expected_status":200}}},"default_environment":"production"}

@@ -1,7 +1,7 @@
 # 首次接入、轮换与恢复
 
 1. `./.workflow-tools/run credentials init` 创建仓库外授权根目录。把连接文件、上传管理文件和密码文件保持 0600；目录 0700。秘密不要发到聊天或 Git。
-2. 在 `bootstrap/connection.json` 填写 R2 account_id、bucket、access_key_id、secret_access_key；保留工具生成的 encryption_key。桶不启用 r2.dev 或公共域名。客户端 AES-GCM 加密与云端静态加密同时存在。
+2. 在 `bootstrap/connection.json` 填写 R2 account_id、bucket、access_key_id、secret_access_key；保留工具生成的 encryption_key。需要设置本机 Cloudflare 部署默认账户时填写 `cloudflare.account_id`，项目级 `cloudflare.account_id` 可以覆盖它。桶不启用 r2.dev 或公共域名。客户端 AES-GCM 加密与云端静态加密同时存在。
 3. 管理上传需要独立桶级 Object Read & Write 凭据，放入 `admin/r2-writer.json`。运行连接使用桶级 Object Read only 凭据；这些 Object 权限用于 S3 API。
 4. 放入 `incoming/apple/distribution.p12`、`incoming/apple/p12-password.txt`、每个 Bundle ID 的 `incoming/apple/profiles/*.mobileprovision`、`incoming/cloudflare/deploy-token.txt`。Apple `.p8` 和 Google JSON 可从旧授权根目录导入。
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
-from .common import Failure, canonical, digest, read_json, require
+from .common import Failure, canonical, digest, private_read, read_json, require
 
 
 TEMPLATE = {
@@ -46,9 +47,41 @@ class Project:
                 "CONFIG_INVALID", "project_id 格式无效")
         require(self.id != "replace-with-project-id", "CONFIG_MISSING", "请填写 project_id")
         require(self.data.get("credential_provider", "r2") in ("r2", "local"), "CONFIG_INVALID", "未知凭据提供者")
-        self.binding = digest({"root": str(self.root), "config": self.data})
+        self._cloudflare_default_account_id = self._load_cloudflare_default()
+        binding_config = self.data
+        if self._cloudflare_default_account_id:
+            binding_config = dict(self.data)
+            cloudflare = dict(binding_config.get("cloudflare", {}))
+            cloudflare["account_id"] = self._cloudflare_default_account_id
+            binding_config["cloudflare"] = cloudflare
+        self.binding = digest({"root": str(self.root), "config": binding_config})
         self.state = self.home / "state/projects" / (self.id + "-" + digest(str(self.root))[:12])
         self.artifacts = self.state / "artifacts"
+
+    def _load_cloudflare_default(self):
+        cloudflare = self.data.get("cloudflare", {})
+        if (not isinstance(cloudflare, dict) or not cloudflare.get("targets")
+                or cloudflare.get("account_id")):
+            return ""
+        path = self.home / "bootstrap/connection.json"
+        try:
+            raw = private_read(path, self.home)
+        except Failure as exc:
+            if exc.code == "AUTH_MISSING":
+                return ""
+            raise
+        try:
+            connection = json.loads(raw)
+            require(isinstance(connection, dict), "AUTH_INVALID", "本机连接授权格式无效")
+            account_id = connection.get("cloudflare", {}).get("account_id", "")
+        except Failure:
+            raise
+        except Exception:
+            raise Failure("AUTH_INVALID", "本机连接授权格式无效") from None
+        require(not account_id or (isinstance(account_id, str)
+                and re.fullmatch(r"[0-9a-f]{32}", account_id)),
+                "AUTH_INVALID", "本机 Cloudflare Account ID 格式无效")
+        return account_id
 
     def resolve(self, value, *, exists=False, directory=False):
         require(isinstance(value, str) and value and not Path(value).is_absolute(),
@@ -62,6 +95,8 @@ class Project:
     def section(self, name):
         value = self.data.get(name, {})
         require(isinstance(value, dict), "CONFIG_INVALID", "配置段必须是对象", field=name)
+        if name == "cloudflare" and self._cloudflare_default_account_id and not value.get("account_id"):
+            return {**value, "account_id": self._cloudflare_default_account_id}
         return value
 
     def target(self, name, environment):
