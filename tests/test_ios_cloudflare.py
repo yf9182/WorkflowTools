@@ -56,7 +56,8 @@ def test_real_cms_and_ipa_identity(distribution,tmp_path):
 
 @pytest.mark.parametrize('change,code', [
     ('development','PROFILE_NOT_APP_STORE'),('adhoc','PROFILE_NOT_APP_STORE'),('expired','AUTH_EXPIRED'),
-    ('team','TARGET_MISMATCH'),('bundle','TARGET_MISMATCH'),('certificate','TARGET_MISMATCH')])
+    ('team','TARGET_MISMATCH'),('bundle','TARGET_MISMATCH'),('certificate','TARGET_MISMATCH'),
+    ('xcode-managed','PROFILE_XCODE_MANAGED')])
 def test_profile_rejects_wrong_distribution(distribution,change,code):
     data=copy.deepcopy(distribution[2])
     fingerprint=distribution[1].fingerprint(hashes.SHA1()).hex().upper()
@@ -66,6 +67,7 @@ def test_profile_rejects_wrong_distribution(distribution,change,code):
     if change=='team': data['TeamIdentifier']=['OTHER12345']
     if change=='bundle': data['Entitlements']['application-identifier']='ABCDE12345.com.other.app'
     if change=='certificate': fingerprint='0'*40
+    if change=='xcode-managed': data['IsXcodeManaged']=True
     with pytest.raises(Failure) as exc: validate_profile(data,'ABCDE12345','com.example.app',fingerprint)
     assert exc.value.code==code
 

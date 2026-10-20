@@ -11,6 +11,7 @@ import secrets
 import shutil
 import stat
 import subprocess
+import time
 import zipfile
 
 from cryptography.hazmat.primitives import hashes
@@ -34,6 +35,8 @@ def decode_profile(raw):
 def validate_profile(data, team, bundle, certificate_sha1=None):
     e = data.get("Entitlements", {})
     expiration = data.get("ExpirationDate")
+    require(data.get("IsXcodeManaged") is not True, "PROFILE_XCODE_MANAGED",
+            "WorkflowTools 受控签名需要手动管理的 App Store 描述文件；当前描述文件由 Xcode 自动管理", bundle_id=bundle)
     require(isinstance(expiration, dt.datetime), "PROFILE_INVALID", "描述文件缺少到期时间")
     require(expiration.replace(tzinfo=dt.timezone.utc) > dt.datetime.now(dt.timezone.utc),
             "AUTH_EXPIRED", "App Store 描述文件已到期", bundle_id=bundle)
@@ -244,6 +247,32 @@ def _project_args(project, root=None):
     return ["-workspace" if ios.get("workspace") else "-project", str(location), "-scheme", ios["scheme"], "-configuration", "Release"]
 
 
+def _build_cache_dir(project, toolchain):
+    """Keep the Xcode checkout path stable so DerivedData can reuse incremental outputs."""
+    return project.state / "cache/ios-build" / digest(toolchain)[:24]
+
+
+def _append_build_note(path, message):
+    path = Path(path)
+    previous = path.read_bytes() if path.is_file() and not path.is_symlink() else b""
+    atomic_bytes(path, (previous + message.encode("utf-8"))[-4 * 1024 * 1024:])
+
+
+def _record_build_timing(path, phase, started):
+    _append_build_note(path, f"\n[WorkflowTools timing] {phase}: {time.monotonic() - started:.2f}s\n")
+
+
+def _refresh_build_checkout(project, checkout):
+    checkout = Path(checkout)
+    require(not checkout.is_symlink(), "UNSAFE_PATH", "Xcode 构建缓存不能是符号链接")
+    if checkout.exists():
+        require(checkout.is_dir(), "UNSAFE_PATH", "Xcode 构建缓存路径不是目录")
+        shutil.rmtree(checkout)
+    shutil.copytree(project.root, checkout, ignore=shutil.ignore_patterns(
+        ".git", ".build", ".workflow-tools", ".agents", ".codex", ".venv", "node_modules", "__pycache__",
+        ".env", ".dev.vars", "*.p8", "*.p12", "*.key", "*.keychain*", "*.ipa"))
+
+
 def build(runtime, params, job_id, checkpoint):
     project, vault = runtime.project, runtime.vault
     runtime.enforce("ios_build")
@@ -279,18 +308,33 @@ def build(runtime, params, job_id, checkpoint):
                         save(journal_path, journal)
                         atomic_bytes(destination, raw)
                 work = secure_dir(project.artifacts / ("build-" + job_id))
-                checkout = work / "checkout"
+                log = work / "build.log"
                 before = source_binding(project)
                 require(not params.get("source_binding") or params["source_binding"] == before,
                         "SOURCE_CHANGED", "源码在任务排队后发生变化，请重新构建")
-                if checkout.exists():
-                    shutil.rmtree(checkout)
-                shutil.copytree(project.root, checkout, ignore=shutil.ignore_patterns(
-                    ".git", ".build", ".workflow-tools", ".agents", ".codex", ".venv", "node_modules", "__pycache__",
-                    ".env", ".dev.vars", "*.p8", "*.p12", "*.key", "*.keychain*"))
+                toolchain_started = time.monotonic()
+                xcode = run(["xcodebuild", "-version"], timeout=30)
+                require(xcode.returncode == 0, "XCODE_UNAVAILABLE", "无法读取 Xcode 版本")
+                toolchain = {"version": xcode.stdout.decode("utf-8", "replace").strip(),
+                    "developer_dir": os.environ.get("DEVELOPER_DIR", "")}
+                cache_root = secure_dir(_build_cache_dir(project, toolchain))
+                checkout = cache_root / "checkout"
+                derived_data = cache_root / "DerivedData"
+                require(not derived_data.is_symlink(), "UNSAFE_PATH", "Xcode DerivedData 缓存不能是符号链接")
+                reused_derived_data = derived_data.is_dir()
+                derived_data = secure_dir(derived_data)
+                _record_build_timing(log, "toolchain-and-cache-setup", toolchain_started)
+                _append_build_note(log, f"[WorkflowTools] Xcode DerivedData directory: {'existing' if reused_derived_data else 'new'}\n")
+                copy_started = time.monotonic()
+                _refresh_build_checkout(project, checkout)
                 require(before == source_binding(project), "SOURCE_CHANGED", "复制源码期间发生变化")
-                log = work / "build.log"
-                r = run(["xcodebuild", *_project_args(project, checkout), "-showBuildSettings", "-json"], timeout=180, log=log)
+                _record_build_timing(log, "source-checkout", copy_started)
+                settings_started = time.monotonic()
+                try:
+                    r = run(["xcodebuild", *_project_args(project, checkout), "-destination", "generic/platform=iOS",
+                        "-showBuildSettings", "-json"], timeout=180, log=log)
+                finally:
+                    _record_build_timing(log, "show-build-settings", settings_started)
                 require(r.returncode == 0, "XCODE_SETTINGS_FAILED", "无法读取 Release 构建设置")
                 settings = _json_output(r.stdout)
                 mapping = {(x["buildSettings"].get("PROJECT_FILE_PATH", ""), x["target"]): x["buildSettings"] for x in settings}
@@ -329,9 +373,13 @@ def build(runtime, params, job_id, checkpoint):
                 require(ios["bundle_id"] in configured_bundles, "TARGET_MISMATCH", "未找到主 App 签名 target")
                 checkpoint("archiving", version=version, build_number=number)
                 archive = work / "app.xcarchive"
-                r = run(["xcodebuild", *_project_args(project, checkout), "-destination", "generic/platform=iOS",
-                    "-derivedDataPath", str(work / "DerivedData"), "-archivePath", str(archive), "archive"],
-                    timeout=3 * 3600, secret_values=vault.known_secrets, log=log)
+                archive_started = time.monotonic()
+                try:
+                    r = run(["xcodebuild", *_project_args(project, checkout), "-destination", "generic/platform=iOS",
+                        "-derivedDataPath", str(derived_data), "-archivePath", str(archive), "archive"],
+                        timeout=3 * 3600, secret_values=vault.known_secrets, log=log)
+                finally:
+                    _record_build_timing(log, "archive", archive_started)
                 require(r.returncode == 0 and archive.is_dir(), "ARCHIVE_FAILED", "Xcode 归档失败，请查看脱敏构建日志", log=str(log))
                 options = {"method": "app-store-connect", "teamID": ios["team_id"], "signingStyle": "manual",
                     "signingCertificate": signing["certificate_sha1"], "provisioningProfiles": {k: v["uuid"] for k, v in signing["profiles"].items()},
@@ -339,13 +387,19 @@ def build(runtime, params, job_id, checkpoint):
                 export_plist = work / "ExportOptions.plist"
                 atomic_bytes(export_plist, plistlib.dumps(options))
                 checkpoint("exporting")
-                r = run(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportPath", str(work / "export"),
-                    "-exportOptionsPlist", str(export_plist)], timeout=3600, secret_values=vault.known_secrets, log=log)
+                export_started = time.monotonic()
+                try:
+                    r = run(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportPath", str(work / "export"),
+                        "-exportOptionsPlist", str(export_plist)], timeout=3600, secret_values=vault.known_secrets, log=log)
+                finally:
+                    _record_build_timing(log, "export-ipa", export_started)
                 ipas = list((work / "export").glob("*.ipa"))
                 require(r.returncode == 0 and len(ipas) == 1, "EXPORT_FAILED", "IPA 导出失败或产物不唯一", log=str(log))
                 checkpoint("verifying_ipa")
                 identity = {"bundle_id": ios["bundle_id"], "team_id": ios["team_id"], "version": version, "build_number": number}
+                verify_started = time.monotonic()
                 actual = inspect_ipa(ipas[0], identity, signing["certificate_sha1"], True, work / "ipa-check")
+                _record_build_timing(log, "verify-ipa", verify_started)
                 require(set(actual["profiles"]) == configured_bundles, "TARGET_MISMATCH", "IPA 的 App/扩展集合与签名 target 不一致")
                 artifact_id = digest({"ipa": actual["ipa_sha256"], "source": before, "project": str(project.root)})
                 metadata = {**actual, "artifact_id": artifact_id, "project_root": str(project.root), "app_store_id": str(ios["app_store_id"]),
