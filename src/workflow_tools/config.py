@@ -60,8 +60,7 @@ class Project:
 
     def _load_cloudflare_default(self):
         cloudflare = self.data.get("cloudflare", {})
-        if (not isinstance(cloudflare, dict) or not cloudflare.get("targets")
-                or cloudflare.get("account_id")):
+        if not isinstance(cloudflare, dict) or cloudflare.get("account_id"):
             return ""
         path = self.home / "bootstrap/connection.json"
         try:
