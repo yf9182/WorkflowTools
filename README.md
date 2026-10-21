@@ -48,3 +48,5 @@ CLI 与 MCP 共享同一套 Python 运行库。安装器和工具源码位于 `s
 ```
 
 实现细节与验证限制见[验证报告](docs/VERIFICATION.md)。
+
+License: MIT
