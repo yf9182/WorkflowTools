@@ -37,6 +37,15 @@ Cloudflare 部署 token 按实际目标授予 Workers Editor（新 Worker 创建
 
 ## 2. 导入与上传
 
+部署前先检查本机凭据引用，避免重复索要已经导入的 token：
+
+```sh
+./bin/workflow-tools credentials list
+./bin/workflow-tools credentials check --ref personal/cloudflare-deploy --provider r2
+```
+
+`list` 只返回引用名、类型和版本，不会读取或显示凭据内容。项目可将有效引用登记到 `credential_refs`，并在 `cloudflare.api_token_ref` 使用同一引用。若确实没有 API Token，再让用户将其保存到 `incoming/cloudflare/deploy-token.txt`，通过下面的命令导入和上传。
+
 ```sh
 ./bin/workflow-tools credentials import-legacy --source "$HOME/.config/calorie-ops" --prefix personal
 ./bin/workflow-tools credentials import --ref personal/distribution --kind pkcs12 --file "$HOME/.config/workflow-tools/incoming/apple/distribution.p12"

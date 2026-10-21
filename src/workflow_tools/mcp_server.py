@@ -11,6 +11,9 @@ def create_server(root, home=None):
     from mcp.types import ToolAnnotations
     server = MCPServer("WorkflowTools", version="0.1.0",
         instructions="Tools operate only on the configured project. Run workflow_doctor for the capability you need. "
+                    "Before asking for a Cloudflare token, inspect local credential references with "
+                    "./.workflow-tools/run credentials list and validate matching api_token references. "
+                    "Never ask the user to paste a token into chat. "
         "Build, upload, deploy and collection return durable job_id values: poll workflow_job_status until completion. "
         "Never request secret values. Resume unknown external outcomes only through workflow_job_resume, which reconciles first.")
 

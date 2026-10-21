@@ -33,7 +33,7 @@ def parser():
     subs.add_parser("mcp", help="启动项目绑定的 stdio MCP")
     credentials = subs.add_parser("credentials", help="集中凭据管理；不输出明文")
     cs = credentials.add_subparsers(dest="action", required=True)
-    cs.add_parser("init"); cs.add_parser("sweep")
+    cs.add_parser("init"); cs.add_parser("sweep"); cs.add_parser("list", help="列出已登记凭据引用，不输出凭据内容")
     imp = cs.add_parser("import")
     imp.add_argument("--ref", required=True); imp.add_argument("--kind", required=True, choices=sorted(KINDS))
     imp.add_argument("--file", required=True); imp.add_argument("--credential-version", type=int)
@@ -123,6 +123,13 @@ def main(argv=None):
                 result = vault.initialize()
             elif args.action == "sweep":
                 result = vault.sweep()
+            elif args.action == "list":
+                from .common import read_json
+                catalog = read_json(home / "vault/catalog.json", {"schema_version": 1, "credentials": {}})
+                result = {"status": "ready", "credentials": [
+                    {"ref": ref, "kind": meta.get("kind"), "version": meta.get("version")}
+                    for ref, meta in sorted(catalog.get("credentials", {}).items())
+                ]}
             elif args.action == "import":
                 result = vault.import_file(args.ref, args.kind, args.file, args.credential_version)
             elif args.action == "import-legacy":
